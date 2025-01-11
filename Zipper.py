@@ -42,31 +42,38 @@ toIgnore = [
     "temp.csv",
     "data.csv",
     "candlestick_python_data.csv",
-    "XDGEUR.csv"
+    "XDGEUR.csv",
+    "XDGUSD.csv",
+    # "*__pycache__",
+    # "*.pyc"
 ]
 
 def main():
     directory = r"./"
-    for i in range(len(toIgnore)): toIgnore[i] = r"./" + toIgnore[i]
-    toZip(directory)
+    wildcard_toIgnore = []
+    for i in range(len(toIgnore)): 
+        toIgnore[i] = r"./" + toIgnore[i]
+        if "*" in toIgnore[i]:
+            wildcard_toIgnore.append(toIgnore[i].split("*")[1])
+    toZip(directory, wildcard_toIgnore)
 
-def toZip(directory):
+def toZip(directory, wildcard_toIgnore):
     zippedHelp = zipfile.ZipFile(zipf, "w", compression=zipfile.ZIP_DEFLATED)
-    addToZip(zippedHelp, directory)
+    addToZip(zippedHelp, directory, wildcard_toIgnore)
     zippedHelp.close()
 
-def addToZip(zippedHelp, directory):
+def addToZip(zippedHelp, directory, wildcard_toIgnore):
     list = os.listdir(directory)
     for file_list in list:
         file_name = os.path.join(directory, file_list)
 
         if os.path.isfile(file_name):
-            if file_name not in toIgnore:
+            if file_name not in toIgnore and not any(wildcard in file_name for wildcard in wildcard_toIgnore):
                 zippedHelp.write(file_name)
         elif os.path.isdir(file_name):
-            if file_name not in toIgnore:
+            if file_name not in toIgnore and not any(wildcard in file_name for wildcard in wildcard_toIgnore):
                 print("Adding directory '" + file_name + "'...")
-                addToZip(zippedHelp, file_name)
+                addToZip(zippedHelp, file_name, wildcard_toIgnore)
 
 if __name__=="__main__":
     main()

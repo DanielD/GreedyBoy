@@ -1,0 +1,2 @@
+class BollingerStrategy:
+    pass

@@ -2,6 +2,7 @@
 ### GreedyBoyDecisionTester class
 ###
 
+from GBConstants import GBConstants
 from LongTermDecisionMaker import LongTermDecisionMaker
 from ConfigManager import getConfig
 from KrakenApi import get_kraken_token
@@ -11,10 +12,10 @@ from github import Github
 import pandas as pd
 
 # Testing with Dogecoin
-currencyInitial = "XDG"
+currencyInitial = "XBT"
 
-def getCryptoList(krakenApi) -> [str]:
-    return krakenApi.GetPairs("EUR")
+def getCryptoList(krakenApi) -> list[str]:
+    return krakenApi.GetPairs(GBConstants.FIAT_CURRENCY)
 
 def main():
     apiKey, apiPrivateKey, githubToken, repoName, dataBranchName = getConfig()
@@ -43,37 +44,44 @@ def main():
 
     # Test Configurations
     fixFiatBalance = 300
-    cryptoBalance, fiatBalance = 0, 0 # 300 euros
+    cryptoBalance, fiatBalance = 0, 0 # 300 dollars
 
     # Loading test files
     testDatas = dict()
+    print("Loading pairs...")
     for i, pair in enumerate(pairs):
-        print("Loading", pair, "...")
-
         dataPath = tempfile.gettempdir() + "/testData-" + str(pair) + ".csv"
 
         if os.path.exists(dataPath):
             try:
                 testDatas[pair] = pd.read_csv(dataPath, parse_dates=False)
+                print("Loaded", pair, "...")
                 continue
             except: 0
 
         try:
             prices = krakenApi.GetPricesFullname(pair, 1440, 1483142400) # since 2017 every 1 day
+            if prices is None:
+                print("Error while loading", pair, ": No data")
+                continue
+
             frame = pd.DataFrame()
             for priceTab in prices:
-                frame = frame.append({
+                frame = pd.concat([frame, pd.DataFrame({
                     'Date': priceTab[0],
                     'Open': priceTab[1],
                     'High': priceTab[2],
                     'Low': priceTab[3],
                     'Close': priceTab[4]
-                }, ignore_index=True)
+                }, index=[0])], ignore_index=True)
             dataFile = open(dataPath, "w")
             dataFile.write(frame.to_csv(index=False))
             dataFile.close()
             testDatas[pair] = frame
-        except: 0
+            print("Loaded", pair, "...")
+        except Exception as e:
+            print("Error while loading", pair, ":", e) 
+            0
 
     print("Beginning tests...")
     for i, pair in enumerate(pairs):

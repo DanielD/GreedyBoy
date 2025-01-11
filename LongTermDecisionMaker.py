@@ -8,18 +8,20 @@ import pandas as pd
 import requests
 import csv
 
-from pdoc import reset
-
 from LongTermDataMachine import LongTermDataMachine
 from KrakenApi import KrakenApi
 from github import Github
+from GBConstants import GBConstants
 
 class LongTermDecisionMaker:
     def __writeRowToTemp(self, row):
-        self.orderFile = open(self.ordersDataTempPath, "a")
-        self.orderWriter = csv.DictWriter(self.orderFile, fieldnames=['Date', 'Price', 'Amount', 'Order'], lineterminator="\n")
-        self.orderWriter.writerow(row)
-        self.orderFile.close()
+        with open(self.ordersDataTempPath, "a") as f:
+            writer = csv.DictWriter(f, fieldnames=['Date', 'Price', 'Amount', 'Order'], lineterminator="\n")
+            writer.writerow(row)
+        # self.orderFile = open(self.ordersDataTempPath, "a")
+        # self.orderWriter = csv.DictWriter(self.orderFile, fieldnames=['Date', 'Price', 'Amount', 'Order'], lineterminator="\n")
+        # self.orderWriter.writerow(row)
+        # self.orderFile.close()
 
     def __readLastOrders(self):
         try:
@@ -30,14 +32,18 @@ class LongTermDecisionMaker:
             githubFileContent = githubFile.decoded_content.decode('ascii')
             empty = not csv.Sniffer().has_header(githubFileContent)
             if not empty:
-                self.orderFile = open(self.ordersDataTempPath, "w")
-                self.orderFile.write(githubFileContent)
-                self.orderFile.close()
+                with open(self.ordersDataTempPath, "w") as f:
+                    f.write(githubFileContent)
+                # self.orderFile = open(self.ordersDataTempPath, "w")
+                # self.orderFile.write(githubFileContent)
+                # self.orderFile.close()
                 self.dataMachine = LongTermDataMachine.fromFilename(self.ordersDataTempPath, interval=15)
         except:
-            self.orderFile = open(self.ordersDataTempPath, "w")
-            self.orderFile.write("")
-            self.orderFile.close()
+            with open(self.ordersDataTempPath, "w") as f:
+                f.write("")
+            # self.orderFile = open(self.ordersDataTempPath, "w")
+            # self.orderFile.write("")
+            # self.orderFile.close()
         self.orderFile = open(self.ordersDataTempPath, "a")
         self.orderWriter = csv.DictWriter(self.orderFile, fieldnames=['Date', 'Price', 'Amount', 'Order'], lineterminator="\n")
         if empty:
@@ -72,16 +78,28 @@ class LongTermDecisionMaker:
         if self.dataMachine.ordered.size == 0:
             self.dataFiles = dict()
             try:
-               self.dataFiles[self.initial] = None
-               githubFile = self.greedyBoyRepo.get_contents(self.githubDataPath, self.branchName)
-               githubFileContent = githubFile.decoded_content.decode('ascii')
-               empty = not csv.Sniffer().has_header(githubFileContent)
-               if not empty:
-                   self.dataFile = open(self.dataPathWrite, "w")
-                   self.dataFile.write(githubFileContent)
-                   self.dataFile.close()
-                   self.dataMachine = LongTermDataMachine.fromFilename(self.dataPathWrite)
-            except: 0
+                self.dataFiles[self.initial] = None
+                githubFile = self.greedyBoyRepo.get_contents(self.githubDataPath, self.branchName)
+
+                if githubFile.content == '':
+                     githubResponse = requests.get(githubFile.download_url)
+                     githubResponse.raise_for_status()
+                     githubFileContent = githubResponse.text
+                     empty = not csv.Sniffer().has_header(githubFileContent)
+                     if not empty:
+                        with open(self.dataPathWrite, "w") as f:
+                            f.write(githubFileContent)
+                        self.dataMachine = LongTermDataMachine.fromFilename(self.dataPathWrite)
+                else:
+                    githubFileContent = githubFile.decoded_content.decode('ascii')
+                    empty = not csv.Sniffer().has_header(githubFileContent)
+                    if not empty:
+                        with open(self.dataPathWrite, "w") as f:
+                            f.write(githubFileContent)
+                        self.dataMachine = LongTermDataMachine.fromFilename(self.dataPathWrite)
+            except Exception as e:
+                print("Error while loading data from github:", e) 
+                0
 
         #################################
         # Trying to add data from today
@@ -91,13 +109,15 @@ class LongTermDecisionMaker:
             todayData = pd.read_csv(self.todayDataFilename, parse_dates=True)
             todayData = todayData.drop(todayData[todayData.epoch < lastDate].index)
             self.dataMachine.appendDataframe(todayData)
-        except: 0
+        except Exception as e:
+            #print("Error while loading today data:", e) 
+            0
 
         print("Memory usage :", self.dataMachine.memoryUsage())
         self.getCryptoAndFiatBalance()
         print("Initial balance :")
-        print("\t" + str(self.cryptoBalance) + " XDG")
-        print("\t" + str(self.fiatBalance) + " euros")
+        print("\t" + str(self.cryptoBalance) + " " + self.initial)
+        print("\t" + str(self.fiatBalance) + " dollars")
         #print(self.dataMachine.ordered.to_csv(index=False))
 
     def AddOrderMax(self, buyOrSell: str):
@@ -132,7 +152,7 @@ class LongTermDecisionMaker:
         else:
             self.getCryptoAndFiatBalance()
         self.highest = self.lowest = 50
-        print("Balance :" + str(self.cryptoBalance) + self.initial + ", " + str(self.fiatBalance) + " euros")
+        print("Balance :" + str(self.cryptoBalance) + self.initial + ", " + str(self.fiatBalance) + " dollars")
         print("Added to reports : " + str(self.lastOrder))
 
     def addFormatedData(self, epoch, open, high, low, close):
@@ -148,8 +168,12 @@ class LongTermDecisionMaker:
         self.makeDecision()
         #print(self.dataMachine.iloc[:5].to_csv(index=False))
 
-    def getCryptoAndFiatBalance(self):
-        self.cryptoBalance, self.fiatBalance = self.krakenApi.GetCryptoAndFiatBalance(self.initial, "EUR")
+    def getCryptoAndFiatBalance(self) -> tuple[float, float]:
+        """
+        Gets the crypto and fiat balance from the Kraken API
+        :return: tuple of crypto balance and fiat balance
+        """
+        self.cryptoBalance, self.fiatBalance = self.krakenApi.GetCryptoAndFiatBalance(self.initial)
         self.__setBuyOrSellPosition()
         return self.cryptoBalance, self.fiatBalance
 
@@ -170,6 +194,11 @@ class LongTermDecisionMaker:
             closePrice, smma5, smma40 = last['Close'], last['SMMA5'], last['SMMA40']
             #print(time.strftime('%d/%m/%Y %H:%M:%S', time.gmtime(self.dataMachine.ordered.iloc[-1]['Date'])) +
             #      " || Close: {0:6.5f}, SMMA5: {1:6.5f}, SMMA40: {2:6.5f}".format(closePrice, smma5, smma40))
+            if smma5 is None or smma40 is None:
+                return
+            if smma5 == 0 or smma40 == 0:
+                return
+            
             if self.buyOrSellPosition == "buy":
                 if smma5 > smma40 and smma5 / smma40 >= 1.02:
                     print(time.strftime('%d/%m/%Y %H:%M:%S', time.gmtime(self.dataMachine.ordered.iloc[-1]['Date']))
@@ -181,13 +210,13 @@ class LongTermDecisionMaker:
                           + " || Close: {0:6.5f}, SMMA5: {1:6.5f}, SMMA40: {2:6.5f}".format(closePrice, smma5, smma40))
                     self.AddOrderMax("sell")
 
-        return smmaStrategy()
+        smmaStrategy()
 
     def __init__(self, apiKey, apiPrivateKey, githubToken, repoName, dataBranchName, initial, todayDataFilename,
                  ordersTempPath, ordersGithubPath, krakenToken = None, bollingerTolerance: float = 20, testTime: float = None):
         self.initial = initial
         self.dataPathWrite = tempfile.gettempdir() + "/data" + initial + "_old.csv"
-        self.githubDataFilename = time.strftime('%d-%m-%Y', time.localtime(time.time() - 86400)) + ".csv"
+        self.githubDataFilename = time.strftime(GBConstants.DATE_FORMAT, time.localtime(time.time() - 86400)) + ".csv"
         self.githubDataPath = "./price_history/" + initial + "/" + self.githubDataFilename
 
         self.ordersDataTempPath, self.ordersGithubPath = ordersTempPath, ordersGithubPath

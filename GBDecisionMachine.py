@@ -67,7 +67,7 @@ class GBDecisionMachine:
 
     def __append(self, epochTime: float, price: float, amount: float, order: str):
         self.newRound['Date', 'Price', 'Amount', 'Order'] = epochTime, price, amount, order
-        self.ordered.append(self.newRound, ignore_index=True)
+        self.ordered = pd.concat([self.ordered, self.newRound], ignore_index=True)
 
     def append(self, epochTime: float, price: float, amount: float, order: str):
         """Appends new (epochTime, price) into the Dataframes.

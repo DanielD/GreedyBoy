@@ -10,8 +10,13 @@ import time, base64, hashlib, hmac, urllib, json
 import tempfile
 from github import Github
 from GreedyBoyDecisionMaker import GreedyBoyDecisionMaker
+from GBConstants import GBConstants
 
-currencyInitials = ["XDG", "ETH"]
+currencyInitials = [
+    "ADA", "BCH", "DASH", "DOT", "ETC", "OMG", "NANO", "WAVES", "QTUM",
+	"ETH", "GNO", "KAVA", "KEEP", "LINK", "XBT", "XDG", "XRP", "LTC",
+	"XMR", "UNI"
+]
 
 class GreedyBoy:
     ##
@@ -77,9 +82,9 @@ class GreedyBoy:
             self.ordersDataPath, self.githubOrdersPath, self.token                # temp path containing orders, kraken token
         )
         self.decisionMaker.setBuySellLimit(10)
-        self.decisionMaker.AddOrder("buy", 500)
+        self.decisionMaker.AddOrder("buy", GBConstants.MAX_TOKEN_ORDER)
         return
-        self.decisionMakerTimer = time.time()
+        """ self.decisionMakerTimer = time.time()
 
 
         def ws_message(ws, message):
@@ -92,7 +97,7 @@ class GreedyBoy:
             if now >= self.limitTime: self.ws.close()
             j = json.loads(message)
             for initial in currencyInitials:
-                initialEur = initial + "/EUR"
+                initialEur = initial + "/USD"
                 if isinstance(j, list) and j[-1] == initialEur:
                     for info in j[1]:
                         print(initialEur + "[" + time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(float(info[2]))) + "]: " + info[0] + "€")
@@ -102,7 +107,7 @@ class GreedyBoy:
 
         def ws_open(ws):
             for initial in currencyInitials:
-                ws.send('{"event":"subscribe", "subscription":{"name":"trade"}, "pair":["' + initial + '/EUR"]}')
+                ws.send('{"event":"subscribe", "subscription":{"name":"trade"}, "pair":["' + initial + '/USD"]}')
             ws.send('{"event":"subscribe", "subscription":{"name":"ownTrades", "token": "' + base64.b64decode(self.apiPrivateKey) +'"}}')
 
         def ws_close(ws):
@@ -110,7 +115,7 @@ class GreedyBoy:
 
         self.ws = websocket.WebSocketApp("wss://ws.kraken.com/", on_open=ws_open, on_message=ws_message, on_close=ws_close)
         self.decisionMaker.krakenApi.AddOrder("buy", "market", 100)
-        self.ws.run_forever()
+        self.ws.run_forever() """
 
     ##
     ## GITHUB PART
@@ -177,7 +182,7 @@ class GreedyBoy:
 
     def __init__(self, apiKey, apiPrivateKey, githubToken, repoName, dataBranchName, limitTime):
         self.dataPaths = [tempfile.gettempdir() + "/data" + initial + ".csv" for initial in currencyInitials]
-        self.githubDataFilename = time.strftime('%d-%m-%Y', time.localtime(time.time())) + ".csv"
+        self.githubDataFilename = time.strftime(GBConstants.DATE_FORMAT, time.localtime(time.time())) + ".csv"
         self.githubDataPaths = ["./price_history/" + initial + "/" + self.githubDataFilename for initial in currencyInitials]
 
         self.apiKey, self.apiPrivateKey = apiKey, apiPrivateKey
@@ -215,7 +220,7 @@ def main(event, context):
     while True:
         try:
             print(time.strftime('Now: %H:%M:%S, ', time.localtime(time.time()))
-                  + time.strftime('Limit : %d/%m/%Y %H:%M:%S, Time remaining: ', time.localtime(tomorrowLimit.timestamp()))
+                  + time.strftime('Limit : {0}, Time remaining: '.format(GBConstants.PRINT_DATE_TIME_FORMAT), time.localtime(tomorrowLimit.timestamp()))
                   + str(timeLimit - time.time()))
             time.sleep(3)
             if time.time() >= timeLimit:

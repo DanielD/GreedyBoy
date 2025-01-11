@@ -59,3 +59,15 @@ Here's the list :
 apiKey,apiPrivateKey,githubToken,repoName,dataBranchName
 $KRAKEN_API_KEY,$KRAKEN_API_PRIVATE_KEY,$GITHUB_PERSONAL_ACCESS_TOKEN,$REPOSITORY_NAME_FOR_DATA,$DATA_BRANCH_NAME
 ```
+
+## Runnable Files
+
+### GreedyBoy.py
+### GreedyBoyRunner.py
+### GreedyBoyTester.py
+
+## Obsolete Files
+
+```obsolete
+Any file prefixed with LongTerm
+```

@@ -8,8 +8,13 @@ import csv
 import time, base64, hashlib, hmac, urllib, json
 import tempfile
 from github import Github
+from GBConstants import GBConstants
 
-currencyInitials = ["XDG", "ETH"]
+currencyInitials = [
+    "ADA", "BCH", "DASH", "DOT", "ETC", "OMG", "NANO", "WAVES", "QTUM",
+	"ETH", "GNO", "KAVA", "KEEP", "LINK", "XBT", "XDG", "XRP", "LTC",
+	"XMR", "UNI"
+]
 
 class KrakenBacktestGetter:
     ##
@@ -69,15 +74,15 @@ class KrakenBacktestGetter:
             j = json.loads(message)
             #print(j)
             for initial in currencyInitials:
-                initialEur = initial + "/EUR"
+                initialEur = initial + "/USD"
                 if isinstance(j, list) and j[-1] == initialEur:
                     for info in j[1]:
                         self.dataWriters[initial].writerow({"epoch": str(info[2]), "price": str(info[0])})
-                        print(initialEur + "[" + time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(float(info[2]))) + "]: " + info[0] + "€")
+                        print(initialEur + "[" + time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(float(info[2]))) + "]: " + info[0] + "$")
 
         def ws_open(ws):
             for initial in currencyInitials:
-                ws.send('{"event":"subscribe", "subscription":{"name":"trade"}, "pair":["' + initial + '/EUR"]}')
+                ws.send('{"event":"subscribe", "subscription":{"name":"trade"}, "pair":["' + initial + '/USD"]}')
 
         ws = websocket.WebSocketApp("wss://ws.kraken.com/", on_open=ws_open, on_message=ws_message)
         ws.run_forever()
@@ -136,7 +141,7 @@ class KrakenBacktestGetter:
 
     def __init__(self, apiKey, apiPrivateKey, githubToken, repoName, dataBranchName):
         self.dataPaths = [tempfile.gettempdir() + "/data" + initial + ".csv" for initial in currencyInitials]
-        self.githubDataFilename = time.strftime('%d-%m-%Y', time.localtime(time.time())) + ".csv"
+        self.githubDataFilename = time.strftime(GBConstants.DATE_FORMAT, time.localtime(time.time())) + ".csv"
         self.githubDataPaths = ["./price_history/" + initial + "/" + self.githubDataFilename for initial in currencyInitials]
 
         self.apiKey, self.apiPrivateKey = apiKey, apiPrivateKey

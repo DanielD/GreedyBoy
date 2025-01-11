@@ -18,6 +18,7 @@ import tempfile
 import time
 import pandas as pd
 from github import Github
+from GBConstants import GBConstants
 
 class GraphViewerDataMachine:
 
@@ -65,8 +66,8 @@ class GraphViewerDataMachine:
         self.reportData = pd.DataFrame()
         self.priceData = []
         self.dataPath = tempfile.gettempdir() + "/GreedyBoy/graphViewer/" + self.currencyInitial + ".csv"
-        self.githubDataFilenames = [time.strftime('%d-%m-%Y', time.localtime(time.time() - 24 * 60 * 60)) + ".csv",
-                                    time.strftime('%d-%m-%Y', time.localtime(time.time())) + ".csv"]
+        self.githubDataFilenames = [time.strftime(GBConstants.DATE_FORMAT, time.localtime(time.time() - 24 * 60 * 60)) + ".csv",
+                                    time.strftime(GBConstants.DATE_FORMAT, time.localtime(time.time())) + ".csv"]
         self.githubDataPaths = ["./price_history/" + self.currencyInitial + "/" + githubDataFilename for githubDataFilename in self.githubDataFilenames]
         self.githubReportPath = "./reports/" + self.currencyInitial + "/" + "report.csv"
         self.githubToken, self.branchName = githubToken, dataBranchName

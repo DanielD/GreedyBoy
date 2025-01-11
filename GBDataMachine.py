@@ -16,17 +16,42 @@ import pandas.core.generic as gen
 import copy
 import pandas as pd
 import time
+import warnings
+from typing import Union
+
+from GBConstants import GBConstants
+from GBUtilities import GBUtilities
 
 class GBDataMachine:
+    @property
+    def ordered(self) -> Union[pd.DataFrame, gen.NDFrame]:
+        """Returns the ordered data"""
+        return self._ordered
+    
+    @ordered.setter
+    def ordered(self, value: Union[pd.DataFrame, gen.NDFrame]):
+        """Sets the ordered data"""
+        self._ordered = value
+
+    @property
+    def bollingerGaps(self) -> Union[pd.DataFrame, gen.NDFrame]:
+        """Returns the bollinger gaps data"""
+        return self._bollingerGaps
+    
+    @bollingerGaps.setter
+    def bollingerGaps(self, value: Union[pd.DataFrame, gen.NDFrame]):
+        """Sets the bollinger gaps data"""
+        self._bollingerGaps = value
+
     @classmethod
     def fromFilename(cls, fileName: str, interval: int = 15, movingAverageSize: int = 30):
         """Constructor starting from a filename.
 
         :param fileName: Name of the file containing the data.
         :type fileName: str
-        :param interval: Time gap between each price (in min).
+        :param interval: Time gap between each price (in min). (default is 15)
         :type interval: int
-        :param movingAverageSize: Number of data taken into account to calculate a moving average.
+        :param movingAverageSize: Number of data taken into account to calculate a moving average. (default is 30)
         :type movingAverageSize: int
         """
         csvData = pd.read_csv(fileName, parse_dates=True)
@@ -38,9 +63,9 @@ class GBDataMachine:
 
         :param data: Structure containing prices and dates.
         :type data: gen.NDFrame
-        :param interval: Time gap between each price (in min).
+        :param interval: Time gap between each price (in min). (default is 15)
         :type interval: int
-        :param movingAverageSize: Number of data taken into account to calculate a moving average.
+        :param movingAverageSize: Number of data taken into account to calculate a moving average. (default is 30)
         :type movingAverageSize: int
         """
         return cls(data, interval, movingAverageSize)
@@ -50,9 +75,9 @@ class GBDataMachine:
 
         :param data: Structure containing prices and dates.
         :type data: gen.NDFrame
-        :param interval: Time gap between each price (in min).
+        :param interval: Time gap between each price (in min). (default is 15)
         :type interval: int
-        :param movingAverageSize: Number of data taken into account to calculate a moving average.
+        :param movingAverageSize: Number of data taken into account to calculate a moving average. (default is 30)
         :type movingAverageSize: int
         """
         self.interval = interval
@@ -68,26 +93,29 @@ class GBDataMachine:
             'Std': 0,
             'LBand': 0,
             'HBand': 0,
-            'EMA20': 0,
-            'EMA50': 0,
             'EMA5': 0,
-            'EMA40': 0
+            'EMA10': 0,
+            'EMA20': 0,
+            'EMA40': 0,
+            'EMA50': 0,
+            'EMA100': 0,
+            'EMA200': 0
         }
         self.bGapRoundTemp = {
             'Date': 0,
             'Value': 0
         }
-        self.newRound = copy.deepcopy(self.roundTemp)
-        self.newGapRound = copy.deepcopy(self.bGapRoundTemp)
-        self.bollingerGaps = pd.DataFrame()
+        self.newRound = pd.DataFrame(self.roundTemp, index=[0])
+        self.newGapRound = pd.DataFrame(self.bGapRoundTemp, index=[0])
+        self._bollingerGaps = pd.DataFrame()
         if data is not None:
             if 'Low' not in data:
-                self.ordered = pd.DataFrame()
+                self._ordered = pd.DataFrame()
                 self.parseToInterval(data)
             else:
-                self.ordered = data
+                self._ordered = data
         else:
-            self.ordered = pd.DataFrame()
+            self._ordered = pd.DataFrame()
         return
 
     def parseToInterval(self, data: pd.DataFrame):
@@ -101,18 +129,22 @@ class GBDataMachine:
         self.update()
 
     def __append(self, epochTime: float, price: float):
-        if self.newRound['Date'] != 0 and epochTime >= self.newRound['Date'] + 60 * self.interval:
-            if len(self.ordered) == 0 or self.ordered.at[len(self.ordered) - 1, 'Date'] != self.newRound['Date']:
-                self.ordered = self.ordered.append(self.newRound, ignore_index=True)
+        if not self.newRound['Date'].isnull().all() and (epochTime >= self.newRound['Date'] + 60 * self.interval).max():
+            if (
+                len(self.ordered) == 0 or
+                ('Date' not in self.ordered.columns) or 
+                (len(self.ordered) > 0 and (self.ordered.at[len(self.ordered) - 1, 'Date'] != self.newRound['Date']).all())
+            ):
+                self.ordered = pd.concat([self.ordered, self.newRound], ignore_index=True)
                 self.intervalJustClosed = True
-            self.newRound = copy.deepcopy(self.roundTemp)
+            self.newRound = pd.DataFrame(self.roundTemp, index=[0])
         self.newRound['Close'] = price
-        if self.newRound['Date'] == 0:
+        if (self.newRound['Date'] == 0).all():
             self.newRound['Date'] = epochTime - (epochTime % (self.interval * 60))
             self.newRound['Open'] = self.newRound['High'] = self.newRound['Low'] = price
-        if self.newRound['Low'] > price:
+        if (self.newRound['Low'] > price).all():
             self.newRound['Low'] = price
-        elif self.newRound['High'] < price:
+        elif (self.newRound['High'] < price).all():
             self.newRound['High'] = price
 
     def appendFormated(self, date: float, open: float, high: float, low: float, close: float):
@@ -129,7 +161,7 @@ class GBDataMachine:
         :param close: close price
         :type close: float
         """
-        self.ordered = self.ordered.append({
+        self.ordered = pd.concat([self.ordered, pd.DataFrame({
             'Date': date,
             'Open': float(open),
             'High': float(high),
@@ -139,7 +171,7 @@ class GBDataMachine:
             'Std': 0,
             'LBand': 0,
             'HBand': 0
-        }, ignore_index=True)
+        }, index=[0])], ignore_index=True)
 
     def appendFilename(self, fileName: str):
         """Appends a file into the data machine.
@@ -175,30 +207,99 @@ class GBDataMachine:
         :param shouldPrint: specify if the updates operations should be displayed or not
         :type shouldPrint: bool
         """
-        if self.ordered.at[len(self.ordered) - 1, 'Date'] != self.newRound['Date']:
-            self.ordered = self.ordered.append(self.newRound, ignore_index=True)
-            self.intervalJustClosed = True
+
+        warnings.filterwarnings("always", category=FutureWarning)
+
+        # if (self.ordered.at[len(self.ordered) - 1, 'Date'] != self.newRound['Date']).all():
+        #     self.ordered = pd.concat([self.ordered, self.newRound], ignore_index=True)
+        #     self.intervalJustClosed = True
+        # else:
+        #     self.ordered.at[len(self.ordered) - 1, 'High'] = self.newRound['High'].iloc[0]
+        #     self.ordered.at[len(self.ordered) - 1, 'Low'] = self.newRound['Low'].iloc[0]
+        #     self.ordered.at[len(self.ordered) - 1, 'Close'] = self.newRound['Close'].iloc[0]
+        #     self.ordered.at[len(self.ordered) - 1, 'Open'] = self.newRound['Open'].iloc[0]
+
+        if all(col in self.ordered.columns for col in ['Date', 'High', 'Low', 'Close', 'Open']):
+            # Flatten `self.newRound` if it's multi-dimensional
+            new_row = GBUtilities.ensureCorrectFormat(self.newRound, True, 'self.newRound')
+        
+            if self.ordered.empty or self.ordered.iloc[-1]['Date'] != new_row['Date']:
+                # Ensure `self.newRound` is in the correct format for concatenation
+                new_row_df = GBUtilities.createNewDataFrameRow(new_row, 'self.newRound')
+
+                # Append the new row to `self.ordered`
+                if self.ordered.empty:
+                    self.ordered = new_row_df
+                else:
+                    self.ordered = pd.concat([self.ordered, new_row_df], ignore_index=True)
+                self.intervalJustClosed = True
+            else:
+                # Update the last row with new values
+                last_index = self.ordered.index[-1]
+                self.ordered.loc[last_index, ['High', 'Low', 'Close', 'Open']] = (
+                    new_row['High'], new_row['Low'], new_row['Close'], new_row['Open']
+                )
+
+            # Calculate Moving Averages and Bollinger Bands
+            if (
+                len(self.ordered) >= self.movingAverageSize and 
+                all(col in self.ordered.columns for col in ['MA', 'Std'])
+            ):
+                self.ordered['MA'] = self.ordered['Close'].rolling(window=self.movingAverageSize).mean()
+                self.ordered['Std'] = self.ordered['Close'].rolling(window=self.movingAverageSize).std()
+                self.ordered['HBand'] = self.ordered['MA'] + (self.ordered['Std'] * 2)
+                self.ordered['LBand'] = self.ordered['MA'] - (self.ordered['Std'] * 2)
+            else:
+                self.ordered['MA'] = None
+                self.ordered['Std'] = None
+                self.ordered['HBand'] = None
+                self.ordered['LBand'] = None
+
+            # Calculate Exponential Moving Averages (EMA)
+            emaValues = GBConstants.getEMAValues()
+            for emaValue in emaValues:
+                self.ordered['EMA{0}'.format(emaValue)] = self.ordered['Close'].ewm(span=emaValue).mean()
+            # self.ordered['EMA5'] = self.ordered['Close'].ewm(span=5).mean()
+            # self.ordered['EMA10'] = self.ordered['Close'].ewm(span=10).mean()
+            # self.ordered['EMA20'] = self.ordered['Close'].ewm(span=20).mean()
+            # self.ordered['EMA50'] = self.ordered['Close'].ewm(span=50).mean()
+            # self.ordered['EMA40'] = self.ordered['Close'].ewm(span=40).mean()
+            # self.ordered['EMA100'] = self.ordered['Close'].ewm(span=100).mean()
+            # self.ordered['EMA200'] = self.ordered['Close'].ewm(span=200).mean()
+
+            # Calculate Bollinger Gaps
+            if all(col in self.ordered.columns for col in ['HBand', 'LBand']):
+                self.bollingerGaps = pd.DataFrame()
+                self.bollingerGaps['Date'] = self.ordered['Date']
+                self.bollingerGaps['Value'] = round(
+                    (self.ordered['Close'] - self.ordered['LBand']) / 
+                    (self.ordered['HBand'] - self.ordered['LBand']) * 100, 2
+                )
+            else:
+                self.bollingerGaps = pd.DataFrame()
+
+            # Print the last row if it exists
+            if not self.ordered.empty and shouldPrint:
+                last = self.ordered.iloc[-1]
+                print(last)
         else:
-            self.ordered.at[len(self.ordered) - 1, 'High'] = self.newRound['High']
-            self.ordered.at[len(self.ordered) - 1, 'Low'] = self.newRound['Low']
-            self.ordered.at[len(self.ordered) - 1, 'Close'] = self.newRound['Close']
-            self.ordered.at[len(self.ordered) - 1, 'Open'] = self.newRound['Open']
-        self.ordered['MA'] = self.ordered['Close'].rolling(window=self.movingAverageSize).mean()
-        self.ordered['EMA20'] = self.ordered['Close'].ewm(span=20).mean()
-        self.ordered['EMA50'] = self.ordered['Close'].ewm(span=50).mean()
-        self.ordered['EMA40'] = self.ordered['Close'].ewm(span=40).mean()
-        self.ordered['EMA5'] = self.ordered['Close'].ewm(span=5).mean()
-        self.ordered['Std'] = self.ordered['Close'].rolling(window=self.movingAverageSize).std()
-        self.ordered['HBand'] = self.ordered['MA'] + (self.ordered['Std'] * 2)
-        self.ordered['LBand'] = self.ordered['MA'] - (self.ordered['Std'] * 2)
-        self.bollingerGaps = pd.DataFrame()
-        self.bollingerGaps['Date'] = self.ordered['Date']
-        self.bollingerGaps['Value'] = round(
-            (self.ordered['Close'] - self.ordered['LBand']) / (self.ordered['HBand'] - self.ordered['LBand']) * 100
-        , 2)
-        last = self.ordered.iloc[-1]
-        if shouldPrint:
-            print(self.ordered.iloc[[-1]])
+            print("DataFrame is empty or missing required 'Close' column.")
+        # self.ordered['MA'] = self.ordered['Close'].rolling(window=self.movingAverageSize).mean()
+        # self.ordered['EMA20'] = self.ordered['Close'].ewm(span=20).mean()
+        # self.ordered['EMA50'] = self.ordered['Close'].ewm(span=50).mean()
+        # self.ordered['EMA40'] = self.ordered['Close'].ewm(span=40).mean()
+        # self.ordered['EMA5'] = self.ordered['Close'].ewm(span=5).mean()
+        # self.ordered['Std'] = self.ordered['Close'].rolling(window=self.movingAverageSize).std()
+        # self.ordered['HBand'] = self.ordered['MA'] + (self.ordered['Std'] * 2)
+        # self.ordered['LBand'] = self.ordered['MA'] - (self.ordered['Std'] * 2)
+        # self.bollingerGaps = pd.DataFrame()
+        # self.bollingerGaps['Date'] = self.ordered['Date']
+        # self.bollingerGaps['Value'] = round(
+        #     (self.ordered['Close'] - self.ordered['LBand']) / (self.ordered['HBand'] - self.ordered['LBand']) * 100
+        # , 2)
+        # last = self.ordered.iloc[-1]
+        # if shouldPrint:
+        #     print(self.ordered.iloc[[-1]])
 
     def convertForGraphicViews(self):
         """Convert data and format it for :ref:`GraphViewer<GraphViewer>`.
@@ -232,7 +333,7 @@ class GBDataMachine:
         """Returns the last close price"""
         return self.ordered.iloc[-1]["Close"] if len(self.ordered.index) != 0 else None
 
-    def intervalClosed(self):
+    def intervalClosed(self) -> bool:
         """Returns if an iteration has just been closed"""
         ret = self.intervalJustClosed
         self.intervalJustClosed = False

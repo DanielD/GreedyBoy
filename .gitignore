@@ -139,4 +139,8 @@ GreedyBoy.zip
 deploy.zip
 
 XDGEUR.csv
+XDGUSD.csv
 data.csv
+
+.DS_Store
+launch.json

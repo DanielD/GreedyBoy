@@ -11,6 +11,8 @@ import _thread
 import tempfile
 import time, base64, hashlib, hmac, json
 
+from GBConstants import GBConstants
+
 
 def get_kraken_signature(urlpath, data, secret):
     postdata = urllib.parse.urlencode(data)
@@ -78,16 +80,18 @@ class KrakenApi:
         :param since: epoch time in seconds
         :type since: int
         """
-        fiat = "USD" if "USD" in cryptoFiat else "EUR"
+        fiat = GBConstants.FIAT_CURRENCY if GBConstants.FIAT_CURRENCY in cryptoFiat else "EUR"
         return self.GetPrices(cryptoFiat.replace(fiat, ''), interval, since, fiat)
+    
+    #def GetKrakenCryptoFiat(self, cryptoFiat: str):
 
-    def GetPrices(self, crypto: str, interval: int, since: int, fiat: str = "EUR"):
+    def GetPrices(self, crypto: str, interval: int, since: int, fiat: str = GBConstants.FIAT_CURRENCY):
         """Returns an array containing every price info, formatted like this :
         [time, open, high, low, close, vwap, volume, count]
 
         :param crypto: name of the crypto (XDG for instance)
         :type crypto: str
-        :param fiat: name of the fiat exchange currency (EUR for instance)
+        :param fiat: name of the fiat exchange currency (default is USD)
         :type fiat: str
         :param interval: interval (in min)
         :type interval: int
@@ -106,7 +110,7 @@ class KrakenApi:
         })
         return resp.json()
 
-    def AddOrder(self, buyOrSell, orderType, amount, cryptocurrency = "XDG", currency = "EUR", test = True, price = 1):
+    def AddOrder(self, buyOrSell, orderType, amount, cryptocurrency, currency = GBConstants.FIAT_CURRENCY, test = True, price = 1):
         """
         :param buyOrSell: "buy" or "sell"
         :type buyOrSell: str
@@ -136,16 +140,22 @@ class KrakenApi:
         respJson = resp.json()
         return respJson['result'] if len(respJson['error']) == 0 else None
 
-    def GetCryptoAndFiatBalance(self, currencyInitial: str, fiatInitial: str = "EUR"):
+    def GetCryptoAndFiatBalance(self, currencyInitial: str, fiatInitial: str = GBConstants.FIAT_CURRENCY) -> tuple[float, float]:
         """Gets a specific currency & fiat balance
 
         :param currencyInitial: initials of the cryptocurrency
         :type currencyInitial: str
-        :param fiatInitial: initials of the fiat currency
+        :param fiatInitial: initials of the fiat currency (default is USD)
         :type fiatInitial:str
+        :return: a tuple containing the cryptocurrency balance and the fiat balance
         """
         resp = self.CheckAccount()
-        return float(resp["X" + currencyInitial]), float(resp["Z" + fiatInitial]) if resp else None
+        if resp is None: return None
+        cInitial = 'X' + currencyInitial if not currencyInitial.startswith('X') else currencyInitial
+        if resp.get(cInitial) is None and resp.get('Z' + fiatInitial) is not None: return 0, float(resp["Z" + fiatInitial])
+        elif resp.get(cInitial) is not None and resp.get('Z' + fiatInitial) is None: return float(resp[cInitial]), 0
+        elif resp.get(cInitial) is None and resp.get('Z' + fiatInitial) is None: return 0, 0
+        return float(resp[cInitial]), float(resp["Z" + fiatInitial]) # XDG, USD
 
     def GetLastTrades(self):
         """Gets the last trades made on your account"""
@@ -195,10 +205,10 @@ class KrakenApi:
         #print(self.token)
 
 if __name__ == '__main__':
-    api = KrakenApi("jN1hIQ7abFkjmn/ffco27/E2PC7/OfLatbX87vG5wa6vDlZP0GQTsoDa",
+    apiTest = KrakenApi("jN1hIQ7abFkjmn/ffco27/E2PC7/OfLatbX87vG5wa6vDlZP0GQTsoDa",
                     "Stha4yXDkHon3dnBBW8+nl7G+YVZvWC88OlltVKh5FhKuYJ0Z5sTgO9qe6a7bZKXfrapKMLgkNbJYuffnzvgtw==",
                     "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")
     #print(api.GetPrices('XDG', 1, time.time() - 180))
     #print(api.CheckAccount())
-    pairs = api.GetPairs("EUR")
+    pairs = apiTest.GetPairs(GBConstants.FIAT_CURRENCY)
     print(pairs)
